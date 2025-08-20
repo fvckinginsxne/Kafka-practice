@@ -24,7 +24,7 @@ func main() {
 	defer admin.Close()
 
 	err = admin.CreateTopic(topicName, &sarama.TopicDetail{
-		NumPartitions:     1,
+		NumPartitions:     3,
 		ReplicationFactor: 1,
 	}, false)
 	if err != nil && err.(*sarama.TopicError).Err != sarama.ErrTopicAlreadyExists {

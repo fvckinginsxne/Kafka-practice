@@ -24,7 +24,7 @@ func consumeMessages(done <-chan struct{}) {
 	}
 	defer consumerGroup.Close()
 
-	numWorkers := 5
+	numWorkers := 3
 	wg := &sync.WaitGroup{}
 	msgChan := make(chan *sarama.ConsumerMessage, numWorkers*2)
 	workerDone := make(chan struct{})
@@ -102,8 +102,8 @@ func worker(
 	for {
 		select {
 		case msg := <-messages:
-			log.Printf("Worker %d processing message [%s] (offset: %d)",
-				id, string(msg.Value), msg.Offset)
+			log.Printf("Worker %d processing message [%s] (offset: %d), (partition: %d)",
+				id, string(msg.Value), msg.Offset, msg.Partition)
 		case <-done:
 			log.Printf("Worker %d shutting down", id)
 			return

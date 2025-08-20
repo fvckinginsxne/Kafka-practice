@@ -13,6 +13,7 @@ func produceMessages() {
 
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
+	config.Producer.Partitioner = sarama.NewManualPartitioner
 
 	producer, err := sarama.NewAsyncProducer(
 		[]string{kafkaAddr}, config,
@@ -47,9 +48,12 @@ func produceMessages() {
 	}()
 
 	for i := range msgNum {
+		partition := int32(i % 3)
+
 		msg := &sarama.ProducerMessage{
 			Topic: topicName,
 			Value: sarama.StringEncoder(fmt.Sprintf("message: %d", i)),
+			Partition: partition,
 		}
 
 		producer.Input() <- msg
