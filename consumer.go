@@ -14,6 +14,7 @@ func consumeMessages(done <-chan struct{}) {
 
 	config.Consumer.Return.Errors = true
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
+	config.Consumer.Offsets.AutoCommit.Enable = false
 
 	consumerGroup, err := sarama.NewConsumerGroup(
 		[]string{kafkaAddr},
@@ -36,6 +37,7 @@ func consumeMessages(done <-chan struct{}) {
 
 	handler := consumerGroupHandler{
 		messages: msgChan,
+		done: done,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -71,13 +73,16 @@ func consumeMessages(done <-chan struct{}) {
 
 type consumerGroupHandler struct {
 	messages chan<- *sarama.ConsumerMessage
+	done <-chan struct{}
 }
 
 func (h *consumerGroupHandler) Setup(sarama.ConsumerGroupSession) error {
+	log.Println("Consumer group session started")
 	return nil
 }
 
 func (h *consumerGroupHandler) Cleanup(sarama.ConsumerGroupSession) error {
+	log.Println("Consumer group sessetion ending")
 	return nil
 }
 
@@ -85,9 +90,45 @@ func (h *consumerGroupHandler) ConsumeClaim(
 	session sarama.ConsumerGroupSession,
 	claim sarama.ConsumerGroupClaim,
 ) error {
+	batchSize := 3
+	processedCount := 0
+
 	for msg := range claim.Messages() {
-		h.messages <- msg
-		session.MarkMessage(msg, "")
+		select {
+		case <-h.done:
+			if processedCount > 0 {
+				session.Commit()
+				log.Printf("Partition %d: committed %d messages before shutdown", 
+					claim.Partition(), processedCount)
+			}
+			return nil
+		default:
+			select {
+			case h.messages <- msg:
+				session.MarkMessage(msg, "")
+				processedCount++
+	
+				if processedCount >= batchSize {
+					session.Commit()
+					log.Printf("Partition %d: commited batch of %d messages", 
+						claim.Partition(), processedCount)
+					processedCount = 0
+				}
+			case <-h.done:
+				if processedCount > 0 {
+					session.Commit()
+					log.Printf("Partition %d: committed %d messages before shutdown", 
+						claim.Partition(), processedCount)
+				}
+				return nil
+			}
+		}
+	}
+	
+	if processedCount > 0 {
+		session.Commit()
+		log.Printf("Partition %d: committed %d final messages", 
+			claim.Partition(), processedCount)
 	}
 	return nil
 }
