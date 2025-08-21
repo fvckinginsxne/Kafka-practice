@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 
 	"github.com/IBM/sarama"
 )
@@ -32,9 +33,19 @@ func main() {
 	}
 
 	done := make(chan struct{})
+	var wg sync.WaitGroup
 
-	go consumeMessages(done)
-	go produceMessages()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		consumeMessages(done)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		produceMessages()
+	}()
 
 	sigchan := make(chan os.Signal, 1)
 	signal.Notify(sigchan, os.Interrupt)
@@ -44,4 +55,6 @@ func main() {
 	log.Print("Shutting down...")
 
 	close(done)
+
+	wg.Wait()
 }

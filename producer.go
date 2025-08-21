@@ -49,9 +49,11 @@ func produceMessages() {
 
 	for i := range msgNum {
 		partition := int32(i % 3)
-
+		
+		key := fmt.Sprintf("key-%d", i)
 		msg := &sarama.ProducerMessage{
 			Topic: topicName,
+			Key: sarama.StringEncoder(key),
 			Value: sarama.StringEncoder(fmt.Sprintf("message: %d", i)),
 			Partition: partition,
 		}

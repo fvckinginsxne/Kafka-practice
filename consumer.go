@@ -11,6 +11,7 @@ import (
 
 func consumeMessages(done <-chan struct{}) {
 	config := sarama.NewConfig()
+
 	config.Consumer.Return.Errors = true
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 
@@ -27,10 +28,9 @@ func consumeMessages(done <-chan struct{}) {
 	numWorkers := 3
 	wg := &sync.WaitGroup{}
 	msgChan := make(chan *sarama.ConsumerMessage, numWorkers*2)
-	workerDone := make(chan struct{})
 
+	wg.Add(numWorkers)
 	for i := range numWorkers {
-		wg.Add(1)
 		go worker(i, msgChan, done, wg)
 	}
 
@@ -42,14 +42,15 @@ func consumeMessages(done <-chan struct{}) {
 	defer cancel()
 
 	go func() {
-		<-done
+		<-done 
 		cancel()
-		close(workerDone)
+		close(msgChan)
 	}()
 
 	for {
 		select {
 		case <-done:
+			wg.Wait()
 			return
 		default:
 			err := consumerGroup.Consume(ctx, []string{topicName}, &handler)
@@ -102,8 +103,8 @@ func worker(
 	for {
 		select {
 		case msg := <-messages:
-			log.Printf("Worker %d processing message [%s] (offset: %d), (partition: %d)",
-				id, string(msg.Value), msg.Offset, msg.Partition)
+			log.Printf("Worker %d processing message [%s] (offset: %d), (partition: %d), (key: %s)",
+				id, string(msg.Value), msg.Offset, msg.Partition, string(msg.Key))
 		case <-done:
 			log.Printf("Worker %d shutting down", id)
 			return
